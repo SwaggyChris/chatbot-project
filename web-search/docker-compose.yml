@@ -1,0 +1,16 @@
+services:
+  searxng:
+    container_name: swaggbot-searxng
+    image: docker.io/searxng/searxng:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+      - SEARXNG_SECRET=swaggbot-local-secret-change-this-before-sharing
+    volumes:
+      - ./settings.yml:/etc/searxng/settings.yml:ro
+      - searxng-cache:/var/cache/searxng:rw
+
+volumes:
+  searxng-cache:

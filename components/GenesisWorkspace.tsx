@@ -49,6 +49,7 @@ import {
   useState,
 } from "react";
 import { loadMedia, removeMedia, saveMedia } from "@/lib/media-db";
+import RichResponse from "./RichResponse";
 import type {
   AppSettings,
   CustomTheme,
@@ -67,6 +68,7 @@ import type {
 } from "@/lib/types";
 
 type ViewId = "chat" | "library" | "training" | "settings";
+type WebMode = "off" | "auto" | "on";
 type SidebarSectionId = "projects" | "recents";
 type SpeechResult = { results: ArrayLike<ArrayLike<{ transcript: string }>> };
 type SpeechRecognitionLike = {
@@ -98,6 +100,7 @@ const STORAGE = {
   sidebarSections: "swaggbot.sidebar-sections.v1",
   railExpanded: "swaggbot.rail-expanded.v1",
   training: "swaggbot.training.v1",
+  webMode: "swaggbot.web-mode.v1",
 };
 
 const greetings = [
@@ -371,6 +374,7 @@ export default function GenesisWorkspace() {
   const [railExpanded, setRailExpanded] = useState(false);
   const [temporaryChat, setTemporaryChat] = useState(false);
   const [temporaryConversation, setTemporaryConversation] = useState<Conversation | null>(null);
+  const [webMode, setWebMode] = useState<WebMode>("auto");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchSelection, setSearchSelection] = useState<{ type: "chat" | "project"; id: string } | null>(null);
@@ -409,6 +413,7 @@ export default function GenesisWorkspace() {
       username: storedProfile.username ?? "@local-user",
     });
     setTraining(storedTraining);
+    setWebMode(readLocal<WebMode>(STORAGE.webMode, "auto"));
     setExpandedSections(
       readLocal<Record<SidebarSectionId, boolean>>(STORAGE.sidebarSections, {
         projects: true,
@@ -439,10 +444,11 @@ export default function GenesisWorkspace() {
     localStorage.setItem(STORAGE.settings, JSON.stringify(settings));
     localStorage.setItem(STORAGE.profile, JSON.stringify(profile));
     localStorage.setItem(STORAGE.training, JSON.stringify(training));
+    localStorage.setItem(STORAGE.webMode, JSON.stringify(webMode));
     localStorage.setItem(STORAGE.active, activeId);
     localStorage.setItem(STORAGE.sidebarSections, JSON.stringify(expandedSections));
     localStorage.setItem(STORAGE.railExpanded, JSON.stringify(railExpanded));
-  }, [activeId, chats, expandedSections, profile, projects, railExpanded, ready, settings, training]);
+  }, [activeId, chats, expandedSections, profile, projects, railExpanded, ready, settings, training, webMode]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -626,6 +632,10 @@ export default function GenesisWorkspace() {
     setInput("");
     setView("chat");
     setSidebarOpen(false);
+  }
+
+  function cycleWebMode() {
+    setWebMode((current) => (current === "off" ? "auto" : current === "auto" ? "on" : "off"));
   }
 
   function deleteChat(chatId: string) {
@@ -960,6 +970,7 @@ export default function GenesisWorkspace() {
         body: JSON.stringify({
           messages: requestHistory.map(({ role, content }) => ({ role, content })),
           trainingContext,
+          webMode,
         }),
       });
 
@@ -1009,6 +1020,48 @@ export default function GenesisWorkspace() {
     await navigator.clipboard.writeText(message.content);
     setCopiedId(message.id);
     setTimeout(() => setCopiedId(""), 1000);
+  }
+
+  function replaceCodeBlock(source: string, blockIndex: number, nextCode: string) {
+    let currentBlock = -1;
+    const safeCode = nextCode.replace(/```/g, "``\\`");
+
+    return source.replace(/```([^\r\n]*)\r?\n([\s\S]*?)```/g, (full, language: string) => {
+      currentBlock += 1;
+      if (currentBlock !== blockIndex) return full;
+      return `\`\`\`${language}\n${safeCode}\n\`\`\``;
+    });
+  }
+
+  function editAssistantCode(messageId: string, blockIndex: number, nextCode: string) {
+    if (temporaryChat) {
+      setTemporaryConversation((current) =>
+        current
+          ? {
+              ...current,
+              messages: current.messages.map((message) =>
+                message.id === messageId
+                  ? { ...message, content: replaceCodeBlock(message.content, blockIndex, nextCode) }
+                  : message,
+              ),
+              updatedAt: isoNow(),
+            }
+          : current,
+      );
+      return;
+    }
+
+    if (!activeChat) return;
+
+    updateChat(activeChat.id, (chat) => ({
+      ...chat,
+      messages: chat.messages.map((message) =>
+        message.id === messageId
+          ? { ...message, content: replaceCodeBlock(message.content, blockIndex, nextCode) }
+          : message,
+      ),
+      updatedAt: isoNow(),
+    }));
   }
 
   function composerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -1415,7 +1468,18 @@ export default function GenesisWorkspace() {
                 {message.role === "assistant" && <span className="assistant-mark"><Bot size={16} /></span>}
                 <div className="message-body">
                   <div className="message-text">
-                    {message.content || (loading && <span className="typing"><i /><i /><i /></span>)}
+                    {message.content ? (
+                      message.role === "assistant" ? (
+                        <RichResponse
+                          content={message.content}
+                          onEditCode={(blockIndex, nextCode) => editAssistantCode(message.id, blockIndex, nextCode)}
+                        />
+                      ) : (
+                        <p className="user-message-copy">{message.content}</p>
+                      )
+                    ) : (
+                      loading && <span className="typing"><i /><i /><i /></span>
+                    )}
                   </div>
                   {message.role === "assistant" && message.content && (
                     <div className="message-tools">
@@ -2030,6 +2094,16 @@ export default function GenesisWorkspace() {
         <header className="workspace-header reference-header">
           <div />
           <div className="header-actions">
+            <button
+              className={`web-mode-toggle ${webMode !== "off" ? "active" : ""}`}
+              onClick={cycleWebMode}
+              aria-label={`Internet research mode: ${webMode}. Click to change mode.`}
+              title="Off: local only · Auto: search current/web questions · On: search every message"
+            >
+              <Globe2 size={16} />
+              Web
+              <span>{webMode === "off" ? "Off" : webMode === "auto" ? "Auto" : "On"}</span>
+            </button>
             <button
               className={`temporary-toggle ${temporaryChat ? "active" : ""}`}
               onClick={toggleTemporaryChat}
