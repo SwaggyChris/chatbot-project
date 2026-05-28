@@ -1,55 +1,67 @@
-# SWAGGBOT — Gold Logo + Chat-Bar Media Upload Upgrade
+# SWAGGBOT — Local AI Workspace Website
 
-## What this update changes
+SWAGGBOT is a multi-page Next.js application with a landing page, an AI chatbot workspace, a separate Sesame-powered TTS Studio, and an About page.
 
-- Uses your uploaded gold emblem as the SWAGGBOT logo.
-- Displays the logo in the compact sidebar rail.
-- Displays a larger gold logo above the SWAGGBOT welcome wordmark.
-- Converts the `+` button in the chat composer into a working media upload button.
-- Media uploaded through the chat bar is saved into the existing Library using IndexedDB.
+## Pages
 
-## Replace / add these files
+| Route | Page | Purpose |
+| --- | --- | --- |
+| `/` | Landing Page | Branded entry page with navigation and product overview. |
+| `/chat` | AI Chatbot | The existing SWAGGBOT chatbot workspace and local-model workflow. |
+| `/tts-studio` | TTS Studio | Generates speech locally through the Sesame CSM-1B server. |
+| `/about` | About SWAGGBOT | Platform description, structure and direction. |
 
-Copy these files into your existing project folder:
+## Voice architecture
 
-```text
-components/GenesisWorkspace.tsx
-app/globals.css
-public/swaggbot-logo.png
-```
+Kokoro and Chatterbox are not included. TTS Studio no longer uses browser `speechSynthesis` voices; it sends text to the local `csm-voice-server`, which generates WAV audio with `sesame/csm-1b` on your NVIDIA GPU.
 
-The `public` folder may not exist yet. Create it at the root of `chatbot project` if necessary.
+CSM is installed into its own Python 3.10 virtual environment, separate from both Next.js and global Python installations.
 
-Final path for the logo must be:
+## Quick start on Windows
 
-```text
-C:\Users\lianc\Desktop\chatbot project\public\swaggbot-logo.png
-```
-
-## Install
-
-1. Stop the server:
+### First-time CSM setup
 
 ```powershell
-Ctrl + C
+cd "C:\Users\lianc\Desktop\chatbot project"
+.\install-csm-voice.bat
 ```
 
-2. Copy the three files into your existing project and replace existing matching files.
+Before generating audio, accept access to the Sesame model on Hugging Face and authenticate when the installer prompts you. Full details are in `CSM_SETUP_WINDOWS.md`.
 
-3. Restart:
+### Run the CSM voice server
 
 ```powershell
+.\start-csm-voice.bat
+```
+
+### Run the website
+
+Open another PowerShell terminal:
+
+```powershell
+cd "C:\Users\lianc\Desktop\chatbot project"
+npm install
 npm run dev
 ```
 
-4. Hard refresh:
+Then open the local address printed by Next.js, normally `http://localhost:3000`.
+
+## Main files
 
 ```text
-Ctrl + Shift + R
+components/SiteHeader.tsx
+components/LandingPage.tsx
+components/TtsStudio.tsx
+components/AboutSwaggbot.tsx
+app/chat/page.tsx
+app/tts-studio/page.tsx
+app/about/page.tsx
+csm-voice-server/server.py
+csm-voice-server/requirements.txt
+install-csm-voice.bat
+start-csm-voice.bat
+remove-csm-voice.bat
+CSM_SETUP_WINDOWS.md
 ```
 
-## Upload media from the chat bar
-
-Press the `+` button inside the composer. Select images, video, or audio. The uploaded items are stored locally and appear under **Library** in the expanded sidebar.
-
-This upload stores media in your Library; it does not yet send media to the local AI model for visual/audio analysis.
+The existing `components/GenesisWorkspace.tsx` continues to power the AI Chatbot page.

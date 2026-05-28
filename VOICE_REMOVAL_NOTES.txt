@@ -1,0 +1,13 @@
+VOICE/TTS REMOVED FROM SWAGGBOT
+
+Removed from this source package:
+- Kokoro speech proxy endpoint: app/api/genesis/speech/route.ts
+- Kokoro voice server launcher: start-kokoro-voice.bat
+- TTS generation/playback queue and voice output controls in GenesisWorkspace.tsx
+- Browser microphone/voice-chat buttons and listening overlay
+- Old voice-enabled backup components and unused GenesisChat component
+
+Audio uploads in the Library remain supported; they do not run a voice model.
+
+This clean source delivery intentionally excludes node_modules, .next, .git and venv.
+Run npm install and npm run dev after replacing your local project folder.
